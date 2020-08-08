@@ -4,7 +4,7 @@ import json
 from pprint import pprint
 from collections import defaultdict
 from scipy.interpolate import interp1d
-# XXX IOBTree
+from BTrees.IOBTree import IOBTree
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 BURNERS = set([
@@ -48,10 +48,6 @@ class Balances:
         self.raw_prices = defaultdict(list)
         self.lps = set()
         self.price_splines = {}
-        self.price_min = {}
-        self.price_max = {}
-        self.price_t_min = {}
-        self.price_t_max = {}
 
     def load(self, tx_file, vp_file):
         with open(tx_file) as f:
@@ -94,17 +90,9 @@ class Balances:
                 print(pool)
                 ts = [el['timestamp'] for el in self.raw_prices[pool]]
                 vp = [el['virtualPrice'] for el in self.raw_prices[pool]]
-                self.price_splines[pool] = interp1d(ts, vp, kind='linear')
-                self.price_min[pool] = self.price_splines[pool].y.min()
-                self.price_max[pool] = self.price_splines[pool].y.max()
-                self.price_t_min[pool] = self.price_splines[pool].x.min()
-                self.price_t_max[pool] = self.price_splines[pool].x.max()
+                self.price_splines[pool] = interp1d(ts, vp, kind='linear', fill_value=(min(vp), max(vp)))
             else:
                 self.price_splines[pool] = lambda x: 1.0  # XXX
-                self.price_min[pool] = 1.0
-                self.price_max[pool] = 1.0
-                self.price_t_min[pool] = 0
-                self.price_t_max[pool] = 1e10
 
         for pool in POOL_TOKENS:  # self.raw_transfers.keys():
             for el in self.raw_transfers[pool]:
@@ -141,7 +129,5 @@ if __name__ == '__main__':
     balances = Balances()
     balances.load('json/transfer_events.json', 'json/virtualPrices.json')
     balances.fill()
-    # XXX graph doesn't work with multiple Transfer events in the same tx
-    # XXX needs fixing
     import IPython
     IPython.embed()
