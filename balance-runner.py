@@ -4,7 +4,7 @@ import json
 from pprint import pprint
 from collections import defaultdict
 from scipy.interpolate import interp1d
-from BTrees.IOBTree import IOBTree
+from BTrees.OOBTree import OOBTree
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 BURNERS = set([
@@ -43,7 +43,7 @@ POOL2TOKEN = {
 
 class Balances:
     def __init__(self):
-        self.balances = defaultdict(lambda: defaultdict(list))  # pool -> address -> [(timestamp, value, nonce?)]
+        self.balances = defaultdict(lambda: defaultdict(OOBTree))  # pool -> address -> [(timestamp, block, logIndex) -> value]
         self.raw_transfers = defaultdict(list)
         self.raw_prices = defaultdict(list)
         self.lps = set()
@@ -96,20 +96,25 @@ class Balances:
 
         for pool in POOL_TOKENS:  # self.raw_transfers.keys():
             for el in self.raw_transfers[pool]:
+                key = (el['block'], el['timestamp'], el['logIndex'])
                 if el['from'] not in BURNERS:
-                    if len(self.balances[pool][el['from']]) > 0:
-                        _, value = self.balances[pool][el['from']][-1]
-                    elif el['value'] > 0:
-                        pprint(el)
-                    value -= el['value']
-                    self.balances[pool][el['from']].append((el['timestamp'], value))
+                    tree = self.balances[pool][el['from']]
+                    if key not in tree:
+                        if len(tree) > 0:
+                            value = tree.values()[-1]
+                        elif el['value'] > 0:
+                            pprint(el)
+                        value -= el['value']
+                        tree[key] = value
                 if el['to'] not in BURNERS:
-                    if len(self.balances[pool][el['to']]) > 0:
-                        _, value = self.balances[pool][el['to']][-1]
-                    else:
-                        value = 0
-                    value += el['value']
-                    self.balances[pool][el['to']].append((el['timestamp'], value))
+                    tree = self.balances[pool][el['to']]
+                    if key not in tree:
+                        if len(tree) > 0:
+                            value = tree.values()[-1]
+                        else:
+                            value = 0
+                        value += el['value']
+                        tree[key] = value
 
     # Filling integrals:
     # * iterate time
