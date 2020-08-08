@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import datetime
 from pprint import pprint
 from collections import defaultdict
 from scipy.interpolate import interp1d
@@ -48,6 +49,10 @@ class Balances:
         self.raw_prices = defaultdict(list)
         self.lps = set()
         self.price_splines = {}
+        self.min_timestamp = 1e15
+        self.max_timestamp = 0
+        self.user_integrals = defaultdict(list)  # user -> (timestamp, integral)
+        self.total = 0.0
 
     def load(self, tx_file, vp_file):
         with open(tx_file) as f:
@@ -68,6 +73,8 @@ class Balances:
                 if event['from'] not in BURNERS:
                     self.lps.add(event['from'])
                 event['timestamp'] = el['timestamp']
+                self.min_timestamp = min(self.min_timestamp, event['timestamp'])
+                self.max_timestamp = max(self.max_timestamp, event['timestamp'])
                 event['block'] = el['block']
                 self.raw_transfers[event['address']].append(event)
 
@@ -86,22 +93,18 @@ class Balances:
 
     def fill(self):
         for pool in POOL_TOKENS:
-            if pool != '0xd905e2eaebe188fc92179b6350807d8bd91db0d8':  # XXX no pax?
-                print(pool)
-                ts = [el['timestamp'] for el in self.raw_prices[pool]]
-                vp = [el['virtualPrice'] for el in self.raw_prices[pool]]
-                self.price_splines[pool] = interp1d(ts, vp, kind='linear', fill_value=(min(vp), max(vp)))
-            else:
-                self.price_splines[pool] = lambda x: 1.0  # XXX
+            ts = [el['timestamp'] for el in self.raw_prices[pool]]
+            vp = [el['virtualPrice'] for el in self.raw_prices[pool]]
+            self.price_splines[pool] = interp1d(ts, vp, kind='linear', fill_value=(min(vp), max(vp)), bounds_error=False)
 
         for pool in POOL_TOKENS:  # self.raw_transfers.keys():
             for el in self.raw_transfers[pool]:
-                key = (el['block'], el['timestamp'], el['logIndex'])
+                key = (-el['timestamp'], -el['block'], -el['logIndex'])
                 if el['from'] not in BURNERS:
                     tree = self.balances[pool][el['from']]
                     if key not in tree:
                         if len(tree) > 0:
-                            value = tree.values()[-1]
+                            value = tree.values()[0]
                         elif el['value'] > 0:
                             pprint(el)
                         value -= el['value']
@@ -110,16 +113,50 @@ class Balances:
                     tree = self.balances[pool][el['to']]
                     if key not in tree:
                         if len(tree) > 0:
-                            value = tree.values()[-1]
+                            value = tree.values()[0]
                         else:
                             value = 0
                         value += el['value']
                         tree[key] = value
 
+        self.lps = list(self.lps)
+
+    def get_balance(self, pool, addr, timestamp):
+        pool = pool.lower()
+        addr = addr.lower()
+        tree = self.balances[pool][addr]
+        try:
+            return tree.values((-timestamp,))[0]
+        except IndexError:
+            return 0
+
+    def fill_integrals(self):
+        for t in range(self.min_timestamp, self.max_timestamp, 3600):  # 1H
+            print(datetime.datetime.fromtimestamp(t))
+            total = 0
+            deposits = defaultdict(int)
+            for pool in POOL_TOKENS:
+                vp = float(self.price_splines[pool](t))
+                for addr in self.lps:
+                    value = int(vp * self.get_balance(pool, addr, t))
+                    total += value
+                    deposits[addr] += value
+
+            rel = {addr: value / total if total else 0 for addr, value in deposits.items()}
+            for addr in self.lps:
+                if len(self.user_integrals[addr]) == 0:
+                    integral = 0
+                else:
+                    integral = self.user_integrals[addr][-1][1]
+                integral += rel[addr]
+                self.user_integrals[addr].append((t, integral))
+
+            self.total += 1.0
+
     # Filling integrals:
-    # * iterate time
-    # * get vprice for each time (btree)
-    # * get balance for each address at each time (btree)
+    # +* iterate time
+    # +* get vprice for each time (btree)
+    # +* get balance for each address at each time (btree)
     # * calc total*vp across all pools, fractions
     # * add vp * balance * dt to running integral for each address
     # * add vp * total to total integral
@@ -132,7 +169,10 @@ class Balances:
 
 if __name__ == '__main__':
     balances = Balances()
-    balances.load('json/transfer_events.json', 'json/virtualPrices.json')
+    balances.load('json/transfer_events.json', 'json/virtual_prices.json')
     balances.fill()
+    print(balances.get_balance('0xdf5e0e81dff6faf3a7e52ba697820c5e32d806a8',
+                               '0x39415255619783A2E71fcF7d8f708A951d92e1b6',
+                               1583559445))
     import IPython
     IPython.embed()
