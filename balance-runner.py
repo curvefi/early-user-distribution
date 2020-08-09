@@ -89,7 +89,7 @@ POOL2TOKEN = {
     '0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714': '0x075b1bb99792c9e1041ba13afef80c91a1e70fb3'   # sbtc
 }
 
-TIMESTEP = 24 * 3600
+TIMESTEP = 3600
 
 
 class Balances:
