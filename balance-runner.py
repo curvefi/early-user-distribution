@@ -8,7 +8,7 @@ from scipy.interpolate import interp1d
 from BTrees.OOBTree import OOBTree
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
-BURNERS = set([
+BURNERS = [
     ZERO_ADDRESS,
     "0xdcb6a51ea3ca5d3fd898fd6564757c7aaec3ca92",   # susdv2
     "0x13c1542a468319688b89e323fe9a3be3a90ebb27",   # sbtc
@@ -21,7 +21,8 @@ BURNERS = set([
     "0x803687e7756aff995d3053f7ce6cc41018ef62c3",   # brr.apy.finance
     "0xe4ffd96b5e6d2b6cdb91030c48cc932756c951b5",   # YYFI
     "0x35e3ad7652c7d5798412fea629f3e768662470cd",   # xearn/black wifey
-])
+]
+BURNERS = set(b.lower() for b in BURNERS)
 POOL_TOKENS = [
     '0xdbe281e17540da5305eb2aefb8cef70e6db1a0a9',  # compound1
     '0x3740fb63ab7a09891d7c0d4299442a551d06f5fd',  # compound2
@@ -32,6 +33,10 @@ POOL_TOKENS = [
     '0x2b645a6a426f22fb7954dc15e583e3737b8d1434',  # susd (old, meta)
     '0xc25a3a3b969415c80451098fa907ec722572917f',  # susdv2
     '0xd905e2eaebe188fc92179b6350807d8bd91db0d8',  # pax
+    '0x49849c98ae39fff122806c06791fa73784fb3675',  # ren
+    '0x075b1bb99792c9e1041ba13afef80c91a1e70fb3'   # sbtc
+]
+BTC_TOKENS = [
     '0x49849c98ae39fff122806c06791fa73784fb3675',  # ren
     '0x075b1bb99792c9e1041ba13afef80c91a1e70fb3'   # sbtc
 ]
@@ -65,12 +70,18 @@ class Balances:
         self.user_integrals = defaultdict(list)  # user -> (timestamp, integral)
         self.total = 0.0
 
-    def load(self, tx_file, vp_file):
+    def load(self, tx_file, vp_file, btc_price_file):
         with open(tx_file) as f:
             data = json.load(f)
 
         with open(vp_file) as f:
             virtual_prices = json.load(f)
+
+        with open(btc_price_file) as f:
+            btc_prices = json.load(f)['prices']
+        btc_prices = [(t // 1000, p) for t, p in btc_prices]
+        t, btc_prices = list(zip(*btc_prices))
+        self.btc_spline = interp1d(t, btc_prices, kind='linear', fill_value=(btc_prices[0], btc_prices[-1]), bounds_error=False)
 
         transfers = data
         for el in transfers:
@@ -147,6 +158,8 @@ class Balances:
             deposits = defaultdict(int)
             for pool in POOL_TOKENS:
                 vp = float(self.price_splines[pool](t))
+                if pool in BTC_TOKENS:
+                    vp *= float(self.btc_spline(t))
                 for addr in self.lps:
                     value = int(vp * self.get_balance(pool, addr, t))
                     total += value
@@ -180,7 +193,7 @@ class Balances:
 
 if __name__ == '__main__':
     balances = Balances()
-    balances.load('json/transfer_events.json', 'json/virtual_prices.json')
+    balances.load('json/transfer_events.json', 'json/virtual_prices.json', 'json/btc-prices.json')
     balances.fill()
     balances.fill_integrals()
     # '0xdf5e0e81dff6faf3a7e52ba697820c5e32d806a8'
