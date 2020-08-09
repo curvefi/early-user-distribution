@@ -125,6 +125,7 @@ class Balances:
                 if el['from'] not in BURNERS:
                     tree = self.balances[pool][el['from']]
                     if key not in tree:
+                        value = 0
                         if len(tree) > 0:
                             value = tree.values()[0]
                         elif el['value'] > 0:
@@ -134,6 +135,7 @@ class Balances:
                 if el['to'] not in BURNERS:
                     tree = self.balances[pool][el['to']]
                     if key not in tree:
+                        value = 0
                         if len(tree) > 0:
                             value = tree.values()[0]
                         else:
@@ -208,6 +210,8 @@ if __name__ == '__main__':
     balances.fill()
     balances.fill_integrals()
     balances.export()
+    import IPython
+    IPython.embed()
     # '0xdf5e0e81dff6faf3a7e52ba697820c5e32d806a8'
     # '0x39415255619783A2E71fcF7d8f708A951d92e1b6',
     # 1583559445
