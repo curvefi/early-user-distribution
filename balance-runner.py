@@ -181,8 +181,8 @@ class Balances:
     def export(self, fname='output.json'):
         user_fractions = {}
         for addr in self.user_integrals:
-            t, integral = self.user_integrals[addr][-1]
-            user_fractions[addr] = (t, integral / self.total)
+            _, integral = self.user_integrals[addr][-1]
+            user_fractions[addr] = integral / self.total
         with open(fname, 'w') as f:
             json.dump(user_fractions, f)
 
