@@ -39,6 +39,39 @@ BTC_TOKENS = [
     '0x49849c98ae39fff122806c06791fa73784fb3675',  # ren
     '0x075b1bb99792c9e1041ba13afef80c91a1e70fb3'   # sbtc
 ]
+BPT_TOKENS = [
+    "0x95C4B6C7CfF608c0CA048df8b81a484aA377172B",
+    "0x939Ff8E09f7006bcBaDa0c41D837a74f77597dE1",
+    "0x66c03a9d8c7DF62A05f043cAA4e33629780eaf7a",
+    "0x6C0dD4dDEBaC30137E512B83FC54ac802d4CCe87",
+    "0xe24AdB0693eC10c5D65eC0C09D5E9410a70b9f7D",
+    "0xfA3bc6DDef77dc737b11Ca7b11623F1Cc77262E9",
+    "0x0d167D8CBBfC00FFa239640134d780A808E8FBa0",
+    "0x82865098c6cEbcc51385077034AAe96cE6E024D4",
+    "0x81D258af4f640021a73ceA2A45849D4DfB3222eC",
+    "0xc855F1572c8128ADd6F0503084Ba23930B7461f8",
+    "0xDFb0CE371d4858d2ea247c1d2e07b40daF4e9298",
+    "0x8194EFab90A290b987616F687Bc380b041A2Cc25",
+    "0xC4B2c51F405E4E8bc498385240f6FEC11969D071",
+    "0xD184C354AaAa92C84D5a1923b6Bca21D78a481da",
+    "0x46e75e1a791b111d13c8dc38aba706a635f1e7f4",
+    "0x9730dc8327807903844a71624f3b831c20bc6dda",
+    "0xc4031959c45597051f4ac7b166673b144f811034",
+    "0x125452a1f4adafa754453cae635fdc0bcaf21191",
+    "0x87469cf4ea19822f2983751c1398f3fbbfbb63d2",
+    "0x198059d85defcd671cc1ee1919979a934bc039be",
+]
+BPT_TOKENS = [t.lower() for t in BPT_TOKENS]
+BPT_REWARDS = [
+    "0x3a22df48d84957f907e67f4313e3d43179040d6e",
+    "0xba86d69e8925382a4b915104148f8ab6f778e394",
+    "0x7c8c77933e2fd6adc2ebfab5dc529c6787c57c34",
+    "0xe247e535a8175dfb252fd691c5b2eda354620f70",
+    "0x01877a9b00ae3c7101525721464f3e5840e07f49",
+    "0x76f39a98ed09bf4fa4689741ef51724d9878023d",
+    "0x4a5ee92022a9ff241a547cbc4986f5284bf628b2",
+]
+BPT_REWARDS = [t.lower() for t in BPT_REWARDS]
 
 POOL2TOKEN = {
     '0xe5fdbab9ad428bbb469dee4cb6608c0a8895cba5': '0xdbe281e17540da5305eb2aefb8cef70e6db1a0a9',  # compound1
@@ -58,7 +91,7 @@ TIMESTEP = 24 * 3600
 
 
 class Balances:
-    def __init__(self):
+    def __init__(self, pool_tokens=POOL_TOKENS):
         self.balances = defaultdict(lambda: defaultdict(OOBTree))  # pool -> address -> [(timestamp, block, logIndex) -> value]
         self.raw_transfers = defaultdict(list)
         self.raw_prices = defaultdict(list)
@@ -68,6 +101,7 @@ class Balances:
         self.max_timestamp = 0
         self.user_integrals = defaultdict(list)  # user -> (timestamp, integral)
         self.total = 0.0
+        self.pool_tokens = pool_tokens
 
     def load(self, tx_file, vp_file, btc_price_file):
         with open(tx_file) as f:
@@ -113,34 +147,35 @@ class Balances:
             self.raw_prices[a] = sorted(self.raw_prices[a], key=lambda el: el['block'])
 
     def fill(self):
-        for pool in POOL_TOKENS:
+        for pool in self.pool_tokens:
             ts = [el['timestamp'] for el in self.raw_prices[pool]]
             vp = [el['virtualPrice'] for el in self.raw_prices[pool]]
             self.price_splines[pool] = interp1d(ts, vp, kind='linear', fill_value=(min(vp), max(vp)), bounds_error=False)
 
-        for pool in POOL_TOKENS:  # self.raw_transfers.keys():
+        for pool in self.pool_tokens:  # self.raw_transfers.keys():
             for el in self.raw_transfers[pool]:
-                key = (-el['timestamp'], -el['block'], -el['logIndex'])
-                if (el['from'] not in REWARDS + [ZERO_ADDRESS]) and (el['to'] not in REWARDS):  # != ZERO_ADDRESS:
-                    tree = self.balances[pool][el['from']]
-                    if key not in tree:
-                        value = 0
-                        if len(tree) > 0:
-                            value = tree.values()[0]
-                        elif el['value'] > 0:
-                            pprint(el)
-                        value -= el['value']
-                        tree[key] = value
-                if (el['to'] not in REWARDS + [ZERO_ADDRESS]) and (el['from'] not in REWARDS):  # != ZERO_ADDRESS:
-                    tree = self.balances[pool][el['to']]
-                    if key not in tree:
-                        value = 0
-                        if len(tree) > 0:
-                            value = tree.values()[0]
-                        else:
+                if el['from'] != el['to']:
+                    key = (-el['timestamp'], -el['block'], -el['logIndex'])
+                    if (el['from'] not in REWARDS + [ZERO_ADDRESS]) and (el['to'] not in REWARDS):  # != ZERO_ADDRESS:
+                        tree = self.balances[pool][el['from']]
+                        if key not in tree:
                             value = 0
-                        value += el['value']
-                        tree[key] = value
+                            if len(tree) > 0:
+                                value = tree.values()[0]
+                            elif el['value'] > 0:
+                                pprint(el)
+                            value -= el['value']
+                            tree[key] = value
+                    if (el['to'] not in REWARDS + [ZERO_ADDRESS]) and (el['from'] not in REWARDS):  # != ZERO_ADDRESS:
+                        tree = self.balances[pool][el['to']]
+                        if key not in tree:
+                            value = 0
+                            if len(tree) > 0:
+                                value = tree.values()[0]
+                            else:
+                                value = 0
+                            value += el['value']
+                            tree[key] = value
 
         self.lps = list(self.lps)
 
@@ -157,7 +192,7 @@ class Balances:
         for t in range(self.min_timestamp, self.max_timestamp, TIMESTEP):
             total = 0
             deposits = defaultdict(int)
-            for pool in POOL_TOKENS:
+            for pool in self.pool_tokens:
                 vp = float(self.price_splines[pool](t))
                 if pool in BTC_TOKENS:
                     vp *= float(self.btc_spline(t))
@@ -185,14 +220,115 @@ class Balances:
             user_fractions[addr] = integral / self.total
         with open(fname, 'w') as f:
             json.dump(user_fractions, f)
+        self.user_fractions = user_fractions
+        return user_fractions
 
-    # Filling integrals:
-    # +* iterate time
-    # +* get vprice for each time (btree)
-    # +* get balance for each address at each time (btree)
-    # +* calc total*vp across all pools, fractions
-    # +* add vp * balance * dt to running integral for each address
-    # +* add vp * total to total integral
+
+class BPT:
+    def __init__(self, balances_obj):
+        self.balances = defaultdict(lambda: defaultdict(OOBTree))  # pool -> address -> [(timestamp, block, logIndex) -> value]
+        self.raw_transfers = defaultdict(list)
+        self.lps = set()
+        self.min_timestamp = 1e12  # BPT pools appeared late
+        self.max_timestamp = 0
+        self.user_integrals = defaultdict(list)  # user -> (timestamp, integral)
+        self.total = 0.0
+        self.pool_tokens = BPT_TOKENS
+        self.bcalc = balances_obj
+
+    def load(self, tx_file):
+        with open(tx_file) as f:
+            data = json.load(f)
+
+        transfers = data
+        for el in transfers:
+            el['timestamp'] = int(el['timestamp'])
+            el['block'] = int(el['block'])
+            for event in el['transfers']:
+                event['value'] = int(event['value'])
+                event['logIndex'] = int(event['logIndex'])
+                if event['to'] not in (BPT_REWARDS + [ZERO_ADDRESS]):  # != ZERO_ADDRESS:
+                    self.lps.add(event['to'])
+                if event['from'] not in (BPT_REWARDS + [ZERO_ADDRESS]):  # != ZERO_ADDRESS:
+                    self.lps.add(event['from'])
+                event['timestamp'] = el['timestamp']
+                self.min_timestamp = min(self.min_timestamp, event['timestamp'])
+                self.max_timestamp = max(self.max_timestamp, event['timestamp'])
+                event['block'] = el['block']
+                self.raw_transfers[event['address']].append(event)
+
+        for a in self.raw_transfers.keys():
+            self.raw_transfers[a] = sorted(
+                    self.raw_transfers[a],
+                    key=lambda el: (el['block'], el['logIndex']))
+
+    def fill(self):
+        for pool in self.pool_tokens:  # self.raw_transfers.keys():
+            for el in self.raw_transfers[pool]:
+                key = (-el['timestamp'], -el['block'], -el['logIndex'])
+                if (el['from'] not in BPT_REWARDS + [ZERO_ADDRESS]) and (el['to'] not in BPT_REWARDS):
+                    tree = self.balances[pool][el['from']]
+                    if key not in tree:
+                        value = 0
+                        if len(tree) > 0:
+                            value = tree.values()[0]
+                        elif el['value'] > 0:
+                            pprint(el)
+                        value -= el['value']
+                        tree[key] = value
+                if (el['to'] not in BPT_REWARDS + [ZERO_ADDRESS]) and (el['from'] not in BPT_REWARDS):
+                    tree = self.balances[pool][el['to']]
+                    if key not in tree:
+                        value = 0
+                        if len(tree) > 0:
+                            value = tree.values()[0]
+                        else:
+                            value = 0
+                        value += el['value']
+                        tree[key] = value
+
+        self.lps = list(self.lps)
+
+    def get_balance(self, pool, addr, timestamp):
+        pool = pool.lower()
+        addr = addr.lower()
+        tree = self.balances[pool][addr]
+        try:
+            return tree.values((-timestamp,))[0]
+        except IndexError:
+            return 0
+
+    def fill_integrals(self):
+        user_fractions = self.bcalc.user_fractions
+        self.user_fractions = defaultdict(float)
+        for pool in self.pool_tokens:
+            bpt_total = 0
+            bpt_integrals = defaultdict(list)
+            for t in range(self.min_timestamp, self.max_timestamp, TIMESTEP):
+                total = 0
+                deposits = defaultdict(int)
+                for addr in self.lps:
+                    value = int(self.get_balance(pool, addr, t))
+                    total += value
+                    deposits[addr] += value
+
+                rel = {addr: value / total if total else 0 for addr, value in deposits.items()}
+                for addr in self.lps:
+                    if len(bpt_integrals[addr]) == 0:
+                        integral = 0
+                    else:
+                        integral = bpt_integrals[addr][-1][1]
+                    integral += rel[addr]
+                    bpt_integrals[addr].append((t, integral))
+
+                bpt_total += sum(rel.values())  # only when there are some
+
+            for addr in bpt_integrals:
+                if bpt_total > 0:
+                    self.user_fractions[addr] += bpt_integrals[addr][-1][1] / bpt_total * user_fractions[pool]
+                else:
+                    self.user_fractions[addr] += 0.0
+
 
     # For balancer pools:
     # * have mappings deposit address -> BPT token
@@ -205,9 +341,19 @@ if __name__ == '__main__':
     balances.load('json/transfer_events.json', 'json/virtual_prices.json', 'json/btc-prices.json')
     balances.fill()
     balances.fill_integrals()
-    balances.export()
-    import IPython
-    IPython.embed()
-    # '0xdf5e0e81dff6faf3a7e52ba697820c5e32d806a8'
-    # '0x39415255619783A2E71fcF7d8f708A951d92e1b6',
-    # 1583559445
+    user_fractions = balances.export()
+    bpt_obj = BPT(balances)
+    bpt_obj.load('json/transferEventsBPT.json')
+    bpt_obj.fill()
+    bpt_obj.fill_integrals()
+    for addr in BPT_TOKENS:
+        user_fractions[addr] = 0
+    for addr, val in bpt_obj.user_fractions.items():
+        if addr not in user_fractions:
+            user_fractions[addr] = 0
+        user_fractions[addr] += val
+    with open('output-with-bpt.json', 'w') as f:
+        json.dump(user_fractions, f)
+    print(min(user_fractions.values()))
+    print(max(user_fractions.values()))
+    print(sum(user_fractions.values()))
