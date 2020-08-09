@@ -10,8 +10,17 @@ from BTrees.OOBTree import OOBTree
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 BURNERS = set([
     ZERO_ADDRESS,
-    # "0xfcba3e75865d2d561be8d220616520c171f12851",  # SUSD deposit
-    "0xdcb6a51ea3ca5d3fd898fd6564757c7aaec3ca92",  # SUSD staking
+    "0xdcb6a51ea3ca5d3fd898fd6564757c7aaec3ca92",   # susdv2
+    "0x13c1542a468319688b89e323fe9a3be3a90ebb27",   # sbtc
+    "0x13b54e8271b3e45ce71d8f4fc73ea936873a34fc",   # susd (old)
+    "0x0001fb050fe7312791bf6475b96569d83f695c9f",   # YFI
+    "0xb81d3cb2708530ea990a287142b82d058725c092",   # YFII
+    "0x95284d906ab7f1bd86f522078973771ecbb20662",   # YFFI
+    "0xd5bf26cdbd0b06d3fb0c6acd73db49d21b69e34f",   # YFID
+    "0x9d03A0447aa49Ab26d0229914740c18161b08386",   # simp
+    "0x803687e7756aff995d3053f7ce6cc41018ef62c3",   # brr.apy.finance
+    "0xe4ffd96b5e6d2b6cdb91030c48cc932756c951b5",   # YYFI
+    "0x35e3ad7652c7d5798412fea629f3e768662470cd",   # xearn/black wifey
 ])
 POOL_TOKENS = [
     '0xdbe281e17540da5305eb2aefb8cef70e6db1a0a9',  # compound1
@@ -41,6 +50,8 @@ POOL2TOKEN = {
     '0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714': '0x075b1bb99792c9e1041ba13afef80c91a1e70fb3'   # sbtc
 }
 
+TIMESTEP = 3600
+
 
 class Balances:
     def __init__(self):
@@ -49,7 +60,7 @@ class Balances:
         self.raw_prices = defaultdict(list)
         self.lps = set()
         self.price_splines = {}
-        self.min_timestamp = 1e15
+        self.min_timestamp = int(datetime.datetime(2020, 1, 11).timestamp())  # before this date is really premine
         self.max_timestamp = 0
         self.user_integrals = defaultdict(list)  # user -> (timestamp, integral)
         self.total = 0.0
@@ -73,7 +84,7 @@ class Balances:
                 if event['from'] not in BURNERS:
                     self.lps.add(event['from'])
                 event['timestamp'] = el['timestamp']
-                self.min_timestamp = min(self.min_timestamp, event['timestamp'])
+                # self.min_timestamp = min(self.min_timestamp, event['timestamp'])
                 self.max_timestamp = max(self.max_timestamp, event['timestamp'])
                 event['block'] = el['block']
                 self.raw_transfers[event['address']].append(event)
@@ -131,8 +142,7 @@ class Balances:
             return 0
 
     def fill_integrals(self):
-        for t in range(self.min_timestamp, self.max_timestamp, 3600):  # 1H
-            print(datetime.datetime.fromtimestamp(t))
+        for t in range(self.min_timestamp, self.max_timestamp, TIMESTEP):
             total = 0
             deposits = defaultdict(int)
             for pool in POOL_TOKENS:
@@ -151,6 +161,7 @@ class Balances:
                 integral += rel[addr]
                 self.user_integrals[addr].append((t, integral))
 
+            print(datetime.datetime.fromtimestamp(t), total / 1e18)
             self.total += 1.0
 
     # Filling integrals:
@@ -171,8 +182,9 @@ if __name__ == '__main__':
     balances = Balances()
     balances.load('json/transfer_events.json', 'json/virtual_prices.json')
     balances.fill()
-    print(balances.get_balance('0xdf5e0e81dff6faf3a7e52ba697820c5e32d806a8',
-                               '0x39415255619783A2E71fcF7d8f708A951d92e1b6',
-                               1583559445))
+    balances.fill_integrals()
+    # '0xdf5e0e81dff6faf3a7e52ba697820c5e32d806a8'
+    # '0x39415255619783A2E71fcF7d8f708A951d92e1b6',
+    # 1583559445
     import IPython
     IPython.embed()
