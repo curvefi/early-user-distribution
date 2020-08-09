@@ -55,7 +55,7 @@ POOL2TOKEN = {
     '0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714': '0x075b1bb99792c9e1041ba13afef80c91a1e70fb3'   # sbtc
 }
 
-TIMESTEP = 3600
+TIMESTEP = 24 * 3600
 
 
 class Balances:
@@ -155,6 +155,7 @@ class Balances:
     def fill_integrals(self):
         for t in range(self.min_timestamp, self.max_timestamp, TIMESTEP):
             total = 0
+            pool_totals = defaultdict(int)
             deposits = defaultdict(int)
             for pool in POOL_TOKENS:
                 vp = float(self.price_splines[pool](t))
@@ -164,6 +165,8 @@ class Balances:
                     value = int(vp * self.get_balance(pool, addr, t))
                     total += value
                     deposits[addr] += value
+                    pool_totals[pool] += value / 1e18
+            pprint(pool_totals)
 
             rel = {addr: value / total if total else 0 for addr, value in deposits.items()}
             for addr in self.lps:
@@ -176,6 +179,14 @@ class Balances:
 
             print(datetime.datetime.fromtimestamp(t), total / 1e18)
             self.total += 1.0
+
+    def export(self, fname='output.json'):
+        user_fractions = {}
+        for addr in self.user_integrals:
+            t, integral = self.user_integrals[addr][-1]
+            user_fractions[addr] = (t, integral / self.total)
+        with open(fname, 'w') as f:
+            json.dump(user_fractions, f)
 
     # Filling integrals:
     # +* iterate time
@@ -196,8 +207,7 @@ if __name__ == '__main__':
     balances.load('json/transfer_events.json', 'json/virtual_prices.json', 'json/btc-prices.json')
     balances.fill()
     balances.fill_integrals()
+    balances.export()
     # '0xdf5e0e81dff6faf3a7e52ba697820c5e32d806a8'
     # '0x39415255619783A2E71fcF7d8f708A951d92e1b6',
     # 1583559445
-    import IPython
-    IPython.embed()
