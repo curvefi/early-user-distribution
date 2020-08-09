@@ -60,6 +60,7 @@ BPT_TOKENS = [
     "0x125452a1f4adafa754453cae635fdc0bcaf21191",
     "0x87469cf4ea19822f2983751c1398f3fbbfbb63d2",
     "0x198059d85defcd671cc1ee1919979a934bc039be",
+    "0x9baf8a5236d44ac410c0186fe39178d5aad0bb87"  # cream
 ]
 BPT_TOKENS = [t.lower() for t in BPT_TOKENS]
 BPT_REWARDS = [
@@ -70,6 +71,7 @@ BPT_REWARDS = [
     "0x01877a9b00ae3c7101525721464f3e5840e07f49",
     "0x76f39a98ed09bf4fa4689741ef51724d9878023d",
     "0x4a5ee92022a9ff241a547cbc4986f5284bf628b2",
+    "0xc56f6Eb44bF4fe162616446dBf9e1C46bcdaC512"
 ]
 BPT_REWARDS = [t.lower() for t in BPT_REWARDS]
 
@@ -266,7 +268,7 @@ class BPT:
         for pool in self.pool_tokens:  # self.raw_transfers.keys():
             for el in self.raw_transfers[pool]:
                 key = (-el['timestamp'], -el['block'], -el['logIndex'])
-                if (el['from'] not in BPT_REWARDS + [ZERO_ADDRESS]) and (el['to'] not in BPT_REWARDS):
+                if (el['from'] not in BPT_REWARDS + BPT_TOKENS + [ZERO_ADDRESS]) and (el['to'] not in BPT_REWARDS):
                     tree = self.balances[pool][el['from']]
                     if key not in tree:
                         value = 0
@@ -276,7 +278,7 @@ class BPT:
                             pprint(el)
                         value -= el['value']
                         tree[key] = value
-                if (el['to'] not in BPT_REWARDS + [ZERO_ADDRESS]) and (el['from'] not in BPT_REWARDS):
+                if (el['to'] not in BPT_REWARDS + BPT_TOKENS + [ZERO_ADDRESS]) and (el['from'] not in BPT_REWARDS):
                     tree = self.balances[pool][el['to']]
                     if key not in tree:
                         value = 0
@@ -343,7 +345,7 @@ if __name__ == '__main__':
     balances.fill_integrals()
     user_fractions = balances.export()
     bpt_obj = BPT(balances)
-    bpt_obj.load('json/transferEventsBPT.json')
+    bpt_obj.load('json/transfer_events_bpt.json')
     bpt_obj.fill()
     bpt_obj.fill_integrals()
     for addr in BPT_TOKENS:
