@@ -8,8 +8,7 @@ from scipy.interpolate import interp1d
 from BTrees.OOBTree import OOBTree
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
-BURNERS = [
-    ZERO_ADDRESS,
+REWARDS = [
     "0xdcb6a51ea3ca5d3fd898fd6564757c7aaec3ca92",   # susdv2
     "0x13c1542a468319688b89e323fe9a3be3a90ebb27",   # sbtc
     "0x13b54e8271b3e45ce71d8f4fc73ea936873a34fc",   # susd (old)
@@ -22,7 +21,7 @@ BURNERS = [
     "0xe4ffd96b5e6d2b6cdb91030c48cc932756c951b5",   # YYFI
     "0x35e3ad7652c7d5798412fea629f3e768662470cd",   # xearn/black wifey
 ]
-BURNERS = set(b.lower() for b in BURNERS)
+REWARDS = [b.lower() for b in REWARDS]
 POOL_TOKENS = [
     '0xdbe281e17540da5305eb2aefb8cef70e6db1a0a9',  # compound1
     '0x3740fb63ab7a09891d7c0d4299442a551d06f5fd',  # compound2
@@ -90,9 +89,9 @@ class Balances:
             for event in el['transfers']:
                 event['value'] = int(event['value'])
                 event['logIndex'] = int(event['logIndex'])
-                if event['to'] not in BURNERS:
+                if event['to'] not in (REWARDS + [ZERO_ADDRESS]):  # != ZERO_ADDRESS:
                     self.lps.add(event['to'])
-                if event['from'] not in BURNERS:
+                if event['from'] not in (REWARDS + [ZERO_ADDRESS]):  # != ZERO_ADDRESS:
                     self.lps.add(event['from'])
                 event['timestamp'] = el['timestamp']
                 # self.min_timestamp = min(self.min_timestamp, event['timestamp'])
@@ -122,7 +121,7 @@ class Balances:
         for pool in POOL_TOKENS:  # self.raw_transfers.keys():
             for el in self.raw_transfers[pool]:
                 key = (-el['timestamp'], -el['block'], -el['logIndex'])
-                if el['from'] not in BURNERS:
+                if (el['from'] not in REWARDS + [ZERO_ADDRESS]) and (el['to'] not in REWARDS):  # != ZERO_ADDRESS:
                     tree = self.balances[pool][el['from']]
                     if key not in tree:
                         value = 0
@@ -132,7 +131,7 @@ class Balances:
                             pprint(el)
                         value -= el['value']
                         tree[key] = value
-                if el['to'] not in BURNERS:
+                if (el['to'] not in REWARDS + [ZERO_ADDRESS]) and (el['from'] not in REWARDS):  # != ZERO_ADDRESS:
                     tree = self.balances[pool][el['to']]
                     if key not in tree:
                         value = 0
@@ -157,7 +156,6 @@ class Balances:
     def fill_integrals(self):
         for t in range(self.min_timestamp, self.max_timestamp, TIMESTEP):
             total = 0
-            pool_totals = defaultdict(int)
             deposits = defaultdict(int)
             for pool in POOL_TOKENS:
                 vp = float(self.price_splines[pool](t))
@@ -167,8 +165,6 @@ class Balances:
                     value = int(vp * self.get_balance(pool, addr, t))
                     total += value
                     deposits[addr] += value
-                    pool_totals[pool] += value / 1e18
-            pprint(pool_totals)
 
             rel = {addr: value / total if total else 0 for addr, value in deposits.items()}
             for addr in self.lps:
@@ -194,9 +190,9 @@ class Balances:
     # +* iterate time
     # +* get vprice for each time (btree)
     # +* get balance for each address at each time (btree)
-    # * calc total*vp across all pools, fractions
-    # * add vp * balance * dt to running integral for each address
-    # * add vp * total to total integral
+    # +* calc total*vp across all pools, fractions
+    # +* add vp * balance * dt to running integral for each address
+    # +* add vp * total to total integral
 
     # For balancer pools:
     # * have mappings deposit address -> BPT token
